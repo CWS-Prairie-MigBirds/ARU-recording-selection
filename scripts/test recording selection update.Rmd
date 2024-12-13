@@ -1,0 +1,122 @@
+---
+title: "Test Recording Selection Workflow"
+author: Janine McManus, Jeff Harder, Barry Robinson, Judith Toms, Megan Edgar, Steve Van Wilgenburg
+output: html_document
+date: "2024-12-13"
+---
+
+The following script will select the dates and times based on good weather at one station, and then copy recordings with the same
+dates and times for all other stations in the PSU.
+
+
+Assumes that recordings are stored with each PSU as a directory, and each site within a PSU as a separate
+sub-directory within that PSU directory (PSU = grid for boreal)
+
+
+####################################################################################################
+# Step 1. Load required packages, custom functions, and install required software
+
+
+```{r}
+
+install.packages("librarian")
+
+librarian::shelf(dplyr, seewave, tuneR, suncalc, hms, tidyverse, devtools, deanrobertevans / TrillR)
+
+```
+```{r}
+source("recording-selection-functions.R")
+
+```
+
+
+This function will open recordings in audacity directly from this script. Include the file path to where Audacity is installed on your computer. Best spectrogram settings for birds can be found here:
+
+https://sk.birdatlas.ca/wp-content/uploads/2018/12/Audacity-Specs.pdf
+
+```{r}
+setWavPlayer(shQuote("C:/Program Files/Audacity/Audacity.exe"))
+```
+
+Need to download and Sox - Sound Exchange for TrillR to work. Change the file path to where you have it saved.
+
+Note: do not download the normal executable file from the main page. Instead go to the files tab, then the Sox folder,
+the most recent version, download the zip file, and unzip directly into a program folder. This may be installed and run directly without admin privileges. 
+
+https://sourceforge.net/projects/sox/
+
+```{r}
+setsox.exe("C:/sox-14-4-2/sox.exe")
+```
+
+
+```{r}
+
+```
+
+#Step 2. Set your Primary Sampling Unit (PSU)
+
+
+# Step 3. Set working directory and folder paths
+
+```{r}
+
+```
+
+
+# Step 3. Load data for one ARU station from the PSU
+
+```{r}
+
+```
+
+Take a look at it, any weird dates or times?
+
+```{r}
+
+```
+
+# Step 4. Calculate Sunrise and sunset
+
+```{r}
+
+```
+
+
+# Step 5. Create temporal categoris for selection
+
+```{r}
+
+```
+
+
+# Step 6. Subset recordings between morning and dusk/nocturnal
+
+```{r}
+
+```
+
+
+# Step 7. Draw the recordings
+
+```{r}
+
+```
+
+# Step 8. Load all recordings for the PSU
+
+```{r}
+
+```
+
+# Step 9. Run the selection
+
+We recommend having a file window open to the target folder, and after each category selection inspect that the recordings have copied properly. There may be situations where one station in the PSU stopped recording early, where clock/lat longs were programmed differently between units in a PSU, or two stations accidentally were entered with the same name in the field. It's best to trouble shoot these issues as you go, and for instances where it's just a single station that requires a different recording, you should manually copy over the nearest matching time to the draw.
+
+```{r}
+
+```
+ 
+ 
+Now return to Step ** and change the PSU ID to the next one you need to run the selection for and run the script again
+ 
