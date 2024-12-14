@@ -1,36 +1,36 @@
 ---
-title: "Test Recording Selection Workflow"
+title: "Boreal Bird Monitoring Program - Recording Selection Workflow"
 author: Janine McManus, Jeff Harder, Barry Robinson, Judith Toms, Megan Edgar, Steve Van Wilgenburg
 output: html_document
 date: "2024-12-13"
 ---
 
 The following script will select the dates and times based on good weather at one station, and then copy recordings with the same
-dates and times for all other stations in the PSU.
+dates and times for all other stations in the Primary Sampling Unit (hereafter PSU).
+
+This script will only work when recordings are stored with each PSU as a directory, and each site within a PSU as a separate
+sub-directory. 
 
 
-Assumes that recordings are stored with each PSU as a directory, and each site within a PSU as a separate
-sub-directory within that PSU directory (PSU = grid for boreal)
+################################################################################
+# Preliminaries. Load required packages, custom functions, and install required software
 
-
-####################################################################################################
-# Step 1. Load required packages, custom functions, and install required software
-
+The Librarian package will check to see if all the required packages are installed, install any that are missing, and load all packages for the session.
 
 ```{r}
-
-install.packages("librarian")
+#install.packages("librarian")
 
 librarian::shelf(dplyr, seewave, tuneR, suncalc, hms, tidyverse, devtools, deanrobertevans / TrillR)
-
 ```
+
+Load the custom selection functions.
+
 ```{r}
 source("recording-selection-functions.R")
-
 ```
 
 
-This function will open recordings in audacity directly from this script. Include the file path to where Audacity is installed on your computer. Best spectrogram settings for birds can be found here:
+This function below will allow the script to open recordings directly in Audacity. Change the file path to where Audacity is installed on your computer. Best spectrogram settings for birds can be found here:
 
 https://sk.birdatlas.ca/wp-content/uploads/2018/12/Audacity-Specs.pdf
 
@@ -38,10 +38,10 @@ https://sk.birdatlas.ca/wp-content/uploads/2018/12/Audacity-Specs.pdf
 setWavPlayer(shQuote("C:/Program Files/Audacity/Audacity.exe"))
 ```
 
-Need to download and Sox - Sound Exchange for TrillR to work. Change the file path to where you have it saved.
 
-Note: do not download the normal executable file from the main page. Instead go to the files tab, then the Sox folder,
-the most recent version, download the zip file, and unzip directly into a program folder. This may be installed and run directly without admin privileges. 
+You will need to download and Sox - Sound Exchange in order for TrillR to work. Change the file path in the chunk below to where you have Sox saved.
+
+Note: do not download the normal executable file from the main page. Instead go to the files tab, then the Sox folder, the most recent version, download the zip file, and unzip directly into a program folder. This may be installed and run directly without admin privileges. 
 
 https://sourceforge.net/projects/sox/
 
@@ -50,73 +50,220 @@ setsox.exe("C:/sox-14-4-2/sox.exe")
 ```
 
 
-```{r}
+Enter the parent directory that contains all the recordings for all PSUs in the given year for which you want to run the selection.
 
+```{r}
+parentdir <- "D:/BBMP/2024"
 ```
 
-#Step 2. Set your Primary Sampling Unit (PSU)
-
-
-# Step 3. Set working directory and folder paths
+Finally, create new folders where the selected recordings will be copied into for upload to WildTrax. 10min and 3min recordings have to be uploaded separately, so they need to be copied into different folders.
 
 ```{r}
+dir.create("D:/BBMP/2024/WildTrax Upload") #only needs to be run once to create the folder
 
+new.folder.10M1SPT <- "D:/BBMP/2024/WildTrax Upload/10M1SPT"
+new.folder.3M1SPT <- "D:/BBMP/2024/WildTrax Upload/3M1SPT"
+new.folder.dusk <- "D:/BBMP/2024/WildTrax Upload/DUSK"
+
+dir.create(new.folder.10M1SPT) #only needs to be run once to create the folder
+dir.create(new.folder.3M1SPT) #only needs to be run once to create the folder
+dir.create(new.folder.dusk) #only needs to be run once to create the folder
 ```
 
+You will only need to run the code chunks above once each session. You will now cycle through the code below for each PSU.
 
-# Step 3. Load data for one ARU station from the PSU
+##################################################################################
+
+#Step 1. Set your Primary Sampling Unit (PSU)
 
 ```{r}
-
+PSU <- "563--366"
 ```
 
-Take a look at it, any weird dates or times?
+# Step 2. Set working directory for a single ARU location within the PSU
+
+Note that if the first station folder is not very good for some reason (e.g., ARU failure), you can set the code below to use the second or alternate folder by changing folder number at end of line 102.
 
 ```{r}
+setwd(list.dirs(paste(parentdir, PSU, sep = "/"), recursive = F)[1])
+ getwd()
+```
 
+# Step 3. Get .wav data for one ARU station from the PSU
+
+The following function creates a dataframe with file directory, location, data/time, and julian date.Specify the start and end dates of the selection you would like to do. In the example below we are limiting to dates within the primary breeding period for most songbirds in Canada BCR 11 (May 28 - July 7). You can alter the dates and add draws for other spp groups later.
+
+```{r}
+data <- get.wavs(start.date = "2024-05-28",end.date = "2024-07-07") 
+```
+
+Inspect data for anything out of the ordinary - need a good distribution of data for selection. If not (e.g. ARU failure), go back and select different folder to use as the model for selection.
+
+```{r}
+summary(data)
+hist(data$JDay)
 ```
 
 # Step 4. Calculate Sunrise and sunset
 
-```{r}
+You will need to specify the location of the ARU. Simplest option is to import a location table for all sites and merge with the data table.
 
+```{r}
+loc <- read.csv("C:/Users/McmanusJ/OneDrive - EC-EC/Boreal Bird Monitoring Program (Prairies)/BOSS Sites/! This folder holds a csv with all sites/AllSites_PrairieRegionBoreal.csv")
+
+data <- mergelocations(data = data, locationdata = loc, locationname = "Site", 
+                        Latitude = "Latitude", Longitude = "Longitude")
+
+```
+
+
+```{r}
+data <- getSunCalcs(data, calc = c("sunrise","sunset"), doParallel=T)
 ```
 
 
 # Step 5. Create temporal categoris for selection
 
-```{r}
+For the boreal monitoring program we use one 10-minute recording and five 3-minute recordings in the morning, split into early and late blocks of the deployment. We also transcribe 3 dusk recordings.
 
+EE = early in deployment, early in morning
+EM = early in deployment, mid-morning
+EL = early in deployment, late in morning
+
+LE = late in deployment, early in morning
+LM = late in deployment, mid-morning
+LL = late in deployment, late in morning.
+
+EE will be kept as 10 min recording, all others will be trimmed to 3-minute recordings for transcription. For dusk/night recordings, we will randomly select three recordings across the entire deployment window. 
+
+There is a little wiggle room in the minutes below to account for small variations in ARU programming.  
+
+
+```{r}
+data <- data  %>% mutate(category= NA) %>% 
+  mutate(start.date=min(JDay),end.date= median(JDay),start.time=as_hms(sunrise-(65*60)),end.time=as_hms(sunrise +(49*60))) %>% 
+  categorize("EE",start.date,end.date,start.time,end.time) %>% 
+  
+  mutate(start.date=min(JDay),end.date= median(JDay),start.time=as_hms(sunrise + (50*60)),end.time=as_hms(sunrise +(2.5*60*60))) %>% 
+  categorize("EM",start.date,end.date,start.time,end.time) %>% 
+  
+  mutate(start.date=min(JDay),end.date= median(JDay),start.time= as_hms(sunrise+(2.51*60*60)),end.time= as_hms(sunrise+(5*60*60)))%>% 
+  categorize("EL",start.date,end.date,start.time,end.time) %>%
+  
+  mutate(start.date=median(JDay) +1, end.date= max(JDay),start.time=as_hms(sunrise -(65*60)),end.time=as_hms(sunrise +(49*60))) %>% 
+  categorize("LE",start.date,end.date,start.time,end.time) %>% 
+  
+  mutate(start.date=median(JDay) + 1, end.date= max(JDay),start.time=as_hms(sunrise + (50*60)),end.time=as_hms(sunrise +(2.5*60*60))) %>% 
+  categorize("LM",start.date,end.date,start.time,end.time) %>% 
+  
+  mutate(start.date= median(JDay) + 1, end.date= max(JDay),start.time= as_hms(sunrise+(2.51*60*60)),end.time= as_hms(sunrise+(5*60*60)))%>% 
+  categorize("LL",start.date,end.date,start.time,end.time) %>%
+  
+  mutate(start.date=min(JDay),end.date= max(JDay),start.time=as_hms(sunset - (40*60)),end.time=as_hms(sunset+(40*60))) %>% 
+  categorize("DUSK",start.date,end.date,start.time,end.time) %>% 
+  
+  select(-start.date, -end.date, -start.time, -end.time)
+
+```
+
+Remove NAs
+```{r}
+dataselection <- data[!is.na(data$category),]
+table(data$category)
 ```
 
 
 # Step 6. Subset recordings between morning and dusk/nocturnal
 
 ```{r}
-
+dusk <- subset(data, category=="DUSK")
+morn <- subset(data, category!="DUSK")
 ```
 
 
 # Step 7. Draw the recordings
 
+Randomly sample a number of recordings from morning and dusk. 6 samples seems to be a good number to make sure you have at least one good weather recording. In this case we filter EE recordings to only those that are 10min long.
+
+Take a larger dusk sample since you need three recordings from the draw
+
 ```{r}
+MorningDraw <- morn %>% filter(if (category == "EE") file.duration > 599 else file.duration > 1) %>%  group_by(category) %>% sample_n(6)
+
+n_to_sample_dusk <- min(12, n_dusk)
+print(paste("number of night samples =", n_to_sample_dusk))
+
+DuskDraw <- dusk  %>% sample_n(n_to_sample_dusk)
 
 ```
 
 # Step 8. Load all recordings for the PSU
 
+This can take a while if you have a lot of recordings.
+
 ```{r}
 
+setwd(paste(parentdir, PSU, sep = "/")) 
+
+section.list <- get.wavs(start.date = "2024-05-28",end.date = "2024-07-07")
+
 ```
+
+```{r}
+# Corrupted files introduce NA's into location category that will mess up future steps. Remove any NAs.
+section.list <- section.list[!is.na(section.list$location),]
+```
+
 
 # Step 9. Run the selection
 
 We recommend having a file window open to the target folder, and after each category selection inspect that the recordings have copied properly. There may be situations where one station in the PSU stopped recording early, where clock/lat longs were programmed differently between units in a PSU, or two stations accidentally were entered with the same name in the field. It's best to trouble shoot these issues as you go, and for instances where it's just a single station that requires a different recording, you should manually copy over the nearest matching time to the draw.
 
+EE selection
 ```{r}
-
+file_used_EE <- select_recordings(MorningDraw, "Morning", initial_file_index = 1, target_folder = new.folder.10M1SPT)
 ```
- 
- 
-Now return to Step ** and change the PSU ID to the next one you need to run the selection for and run the script again
+
+EL selection
+```{r}
+file_used_EL <- select_recordings(MorningDraw, "Morning", initial_file_index = 7, target_folder = new.folder.3M1SPT)
+```
+
+EM selection
+```{r}
+file_used_EM <- select_recordings(MorningDraw, "Morning", initial_file_index = 13, target_folder = new.folder.3M1SPT)
+```
+
+LE selection
+```{r}
+file_used_LE <- select_recordings(MorningDraw, "Morning", initial_file_index = 19, target_folder = new.folder.3M1SPT)
+```
+
+LL selection
+```{r}
+file_used_LL <- select_recordings(MorningDraw, "Morning", initial_file_index = 25, target_folder = new.folder.3M1SPT)
+```
+
+LM selection
+```{r}
+file_used_LM <- select_recordings(MorningDraw, "Morning", initial_file_index = 31, target_folder = new.folder.3M1SPT)
+```
+
+Dusk1 selection
+```{r}
+dusk1 <- select_recordings(DuskDraw, "Dusk", initial_file_index = 1, target_folder = new.folder.dusk)
+```
+
+Dusk2 selection
+```{r}
+dusk2 <- select_recordings(DuskDraw, "Dusk", initial_file_index = dusk1 + 1, target_folder = new.folder.dusk)
+```
+
+Dusk3 selection
+```{r}
+dusk3 <- select_recordings(DuskDraw, "Dusk", initial_file_index = dusk2 + 1, target_folder = new.folder.dusk)
+```
+
+
+Now return to Step 1 and change the PSU ID to the next one you need to run selection for and work through the script again!
  
