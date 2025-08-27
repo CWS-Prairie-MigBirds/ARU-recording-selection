@@ -1,0 +1,262 @@
+---
+title: "Protected Areas Bird Monitoring Program - Recording Selection Workflow"
+author: Janine McManus, Jeff Harder, Barry Robinson, Judith Toms, Megan Edgar, Steve Van Wilgenburg
+output: html_document
+date: "2025-08-26"
+---
+
+The following script will select the dates and times based on good weather at one station, and then copy recordings with the same dates and times for all other stations in a given NWA that were deployed for the same period of time.
+
+This script will only work when recordings are stored with each NWA-deployment as a directory, and each ARU station within an NWA-deployment as a separate sub-directory. 
+
+
+################################################################################
+# Preliminaries. Load required packages, custom functions, and install required software
+
+The Librarian package will check to see if all the required packages are installed, install any that are missing, and load all packages for the session.
+
+```{r}
+#install.packages("librarian")
+
+librarian::shelf(dplyr, seewave, tuneR, suncalc, hms, tidyverse, devtools, deanrobertevans / TrillR)
+```
+
+Load the custom selection functions used later in the script.
+
+```{r}
+source("recording-selection-functions.R")
+```
+
+
+Our selection method will open selected recordings directly in Audacity. Change the file path in the chunk below to where Audacity is installed on your computer. The best spectrogram settings for birdsong can be found here:
+
+https://sk.birdatlas.ca/wp-content/uploads/2018/12/Audacity-Specs.pdf
+
+```{r}
+setWavPlayer(shQuote("C:/Program Files/Audacity/Audacity.exe"))
+```
+
+
+You will need to download and install Sox - Sound Exchange in order for TrillR to work. Change the file path in the chunk below to where you have Sox saved.
+
+Note: do not download the normal executable file from the main page. Instead go to the files tab, then the Sox folder, the most recent version, download the zip file, and unzip directly into a program folder. This may be installed and run directly without admin privileges. 
+
+https://sourceforge.net/projects/sox/
+
+```{r}
+setsox.exe("C:/sox-14.4.2/sox.exe")
+```
+
+
+Enter the parent directory that contains all the recordings for all NWAs in the given year for which you want to run the selection.
+
+```{r}
+parentdir <- "D:/PAU/2025"
+```
+
+Finally, create new folders where the selected recordings will be copied into for upload to WildTrax. 10min and 3min recordings have to be uploaded separately, so they need to be copied into different folders.
+
+```{r}
+dir.create("D:/PAU/2025/WildTrax Upload") #only needs to be run once to create the folder
+
+new.folder.10M1SPT <- "D:/PAU/2025/WildTrax Upload/10M1SPT"
+new.folder.3M1SPT <- "D:/PAU/2025/WildTrax Upload/3M1SPT"
+new.folder.dusk <- "D:/PAU/2025/WildTrax Upload/DUSK"
+
+dir.create(new.folder.5M1SPT) #only needs to be run once to create the folder
+dir.create(new.folder.3M1SPT) #only needs to be run once to create the folder
+dir.create(new.folder.night) #only needs to be run once to create the folder
+```
+
+You will only need to run the code chunks above once each session. You will now cycle through the code below for each Primary Sampling Unit or grid of ARUs deployed across the same time period in relatively close proximity.
+
+##################################################################################
+
+#Step 1. Set your NWA-deployment to run for selection by replacing the name of the NWA in the quotations below to match how you have named your folder for that site.
+
+**Note, if there were two rounds of deployments at a given NWA, keep the ARU stations for each deployment in separate folders, for example Sandhills_1 and Sandhills_2
+
+```{r}
+NWA_deployment <- "Tway"
+```
+
+# Step 2. Set working directory for a single ARU location within the PSU
+
+Note that if the first station folder is not very good for some reason (e.g., ARU failure), you can set the code below to use the second or alternate folder by changing folder number at end of line 89.
+
+```{r, setup}
+
+knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, NWA_deployment, sep = "/"), recursive = F)[1])
+
+```
+
+# Step 3. Get .wav data for one ARU station from the NWA
+
+The following function creates a dataframe with file directory, location, data/time, and julian date.Specify the start and end dates of the selection you would like to do. In the example below we are limiting to dates within the primary breeding period for most songbirds in Canada BCR 11 (May 28 - July 7). You can alter the dates and add draws for other spp groups later.
+
+```{r}
+data <- get.wavs(start.date = "2025-05-28",end.date = "2025-07-07") 
+```
+
+Inspect data for anything out of the ordinary - need a good distribution of data for selection. If not (e.g. ARU failure), go back and select different folder to use as the model for selection.
+
+```{r}
+summary(data)
+
+hist(data$JDay)
+```
+
+# Step 4. Calculate Sunrise and sunset
+
+You will need to specify the location of the ARU. Simplest option is to import a location table for all sites and merge with the data table.
+
+```{r}
+loc <- read.csv("C:/Users/McmanusJ/OneDrive - EC-EC/Boreal Bird Monitoring Program (Prairies)/BOSS Sites/! This folder holds a csv with all sites/AllSites_PrairieRegionBoreal.csv")
+
+data <- mergelocations(data = data, locationdata = loc, locationname = "Site", 
+                        Latitude = "Latitude", Longitude = "Longitude")
+
+```
+
+getSunCalcs pulls the timezone from the datetime column. This is not always correct, so check it and change if necessary before calculating sunrise and sunset
+
+```{r}
+
+tmz <- attr(data$datetime,"tzone")
+tmz
+
+data$datetime <- force_tz(data$datetime, tzone = "Canada/Central")
+
+data <- getSunCalcs(data, calc = c("sunrise","sunset"), doParallel=T)
+
+```
+
+
+# Step 5. Create temporal categories for selection
+
+PAU in prairie region need two 5-minute recordings from right around sunrise, 1 10-minute to be transcribed by terrestrial unit and three 3-minute dusk recordings (PAU to transcribe just 2 to start)
+
+1 morning recording should be selected within the first half of the deployment (Early_Deployment), and two recordings will be selected from the second half (Late_Deployment)
+
+Night recordings are selected randomly across the entire deployment
+
+I've added a little wiggle room in the minutes to account for small variations in ARU programming.  
+
+NE = Night Early; NM = Night Middle; NL = Night Late
+
+
+
+```{r}
+data <- data  %>% mutate(category= NA) %>% 
+  
+  mutate(start.date=min(JDay),end.date= median(JDay),start.time=as_hms(sunrise-(35*60)),end.time=as_hms(sunrise +(135*60))) %>% 
+  categorize("AMEarly_Deployment",start.date,end.date,start.time,end.time) %>% 
+  
+  mutate(start.date=median(JDay)+1,end.date= max(JDay),start.time=as_hms(sunrise - (35*60)),end.time=as_hms(sunrise +(135*60))) %>% 
+  categorize("AMLate_Deployment",start.date,end.date,start.time,end.time) %>% 
+ 
+  mutate(start.date=min(JDay),end.date= max(JDay),start.time= as_hms(sunset-(35*60)),end.time= as_hms(sunset+(35*60)))%>%
+  categorize("NE",start.date,end.date,start.time,end.time) %>%
+  
+  mutate(start.date=min(JDay),end.date= max(JDay),start.time= as_hms(sunset+(55*60)),end.time= as_hms(sunset+(3600*4)))%>%
+  categorize("NM",start.date,end.date,start.time,end.time) %>%
+  
+  mutate(start.date=min(JDay),end.date= max(JDay),start.time=as_hms(sunset+(3600*4)),end.time=as_hms(sunset+(3600*7))) %>%
+  categorize("NL",start.date,end.date,start.time,end.time) %>%
+  
+  dplyr::select(-start.date, -end.date, -start.time, -end.time) 
+
+```
+
+Remove NAs
+```{r}
+dataselection <- data[!is.na(data$category),]
+table(data$category)
+```
+
+
+# Step 6. Subset recordings between morning and dusk/nocturnal
+
+```{r}
+night <- subset(data, category %in% c("NE", "NM", "NL"))
+morn <- subset(data, category %in% c("AMEarly_Deployment", "AMLate_Deployment"))
+```
+
+
+# Step 7. Draw the recordings
+
+Randomly sample a number of recordings from morning and dusk. 6 samples seems to be a good number to make sure you have at least one good weather recording. In this case we filter EE recordings to only those that are 10min long.
+
+Take a larger dusk sample since you need three recordings from the draw
+
+```{r}
+MorningDraw <- morn %>%  group_by(category) %>% sample_n(6)
+
+
+NightDraw <- night  %>% sample_n(12)
+
+```
+
+# Step 8. Load all recordings for the PSU
+
+This can take a while if you have a lot of recordings.
+
+```{r, setup}
+
+knitr::opts_knit$set(root.dir = paste(parentdir, NWA_deployment, sep = "/"))
+
+#setwd(paste(parentdir, PSU, sep = "/")) 
+
+
+
+```
+
+
+```{r}
+section.list <- get.wavs(start.date = "2025-05-28",end.date = "2025-07-07")
+```
+
+
+```{r}
+# Corrupted files introduce NA's into location category that will mess up future steps. Remove any NAs.
+section.list <- section.list[!is.na(section.list$location),]
+```
+
+
+# Step 9. Run the selection
+
+We recommend having a file window open to the target folder, and after each category selection inspect that the recordings have copied properly. There may be situations where one station in the PSU stopped recording early, where clock/lat longs were programmed differently between units in a PSU, or two stations accidentally were entered with the same name in the field. It's best to trouble shoot these issues as you go, and for instances where it's just a single station that requires a different recording, you should manually copy over the nearest matching time to the draw that is good quality.
+
+Early deployment AM
+```{r}
+file_used_early <- select_recordings(MorningDraw, "Morning", initial_file_index = 1, target_folder = new.folder.10M1SPT)
+```
+
+Late deployment AM
+```{r}
+file_used_late <- select_recordings(MorningDraw, "Morning", initial_file_index = 7, target_folder = new.folder.3M1SPT)
+```
+
+Third visit AM
+```{r}
+file_used_third <- select_recordings(MorningDraw, "Morning", initial_file_index = 13, target_folder = new.folder.3M1SPT)
+```
+
+Night Early
+```{r}
+dusk1 <- select_recordings(DuskDraw, "Dusk", initial_file_index = 1, target_folder = new.folder.dusk)
+```
+
+Night Late
+```{r}
+dusk2 <- select_recordings(DuskDraw, "Dusk", initial_file_index = dusk1 + 1, target_folder = new.folder.dusk)
+```
+
+Night mid
+```{r}
+dusk3 <- select_recordings(DuskDraw, "Dusk", initial_file_index = dusk2 + 1, target_folder = new.folder.dusk)
+```
+
+
+Now return to Step 1 and change the NWA deployment name to the next one you need to run selection for and work through the script again!
+ 
