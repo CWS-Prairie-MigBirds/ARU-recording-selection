@@ -53,19 +53,19 @@ setsox.exe("C:/sox-14.4.2/sox.exe")
 Enter the parent directory that contains all the recordings for all PSUs in the given year for which you want to run the selection.
 
 ```{r}
-parentdir <- "D:/GBMP/2025"
+parentdir <- "D:/GBMP/ARU Recordings/2025/SDMB"
 ```
 
 Finally, create new folders where the selected recordings will be copied into for upload to WildTrax. 10min and 3min recordings have to be uploaded separately, so they need to be copied into different folders.
 
 ```{r}
-dir.create("D:/GBMP/2025/WildTrax Upload") #only needs to be run once to create the folder
+dir.create("D:/GBMP/ARU Recordings/2025/WildTrax Upload") #only needs to be run once to create the folder
 
-new.folder.10M1SPT <- "D:/GBMP/2025/WildTrax Upload/10M1SPT"
-new.folder.3M1SPT <- "D:/GBMP/2025/WildTrax Upload/3M1SPT"
-new.folder.dusk <- "D:/GBMP/2025/WildTrax Upload/DUSK"
+new.folder.5M1SPT <- "D:/GBMP/ARU Recordings/2025/WildTrax Upload/5M1SPT"
+new.folder.3M1SPT <- "D:/GBMP/ARU Recordings/2025/WildTrax Upload/3M1SPT"
+new.folder.dusk <- "D:/GBMP/ARU Recordings/2025/WildTrax Upload/DUSK"
 
-dir.create(new.folder.10M1SPT) #only needs to be run once to create the folder
+dir.create(new.folder.5M1SPT) #only needs to be run once to create the folder
 dir.create(new.folder.3M1SPT) #only needs to be run once to create the folder
 dir.create(new.folder.dusk) #only needs to be run once to create the folder
 ```
@@ -77,7 +77,7 @@ You will only need to run the code chunks above once each session. You will now 
 #Step 1. Set your Primary Sampling Unit (PSU)
 
 ```{r}
-PSU <- "SBCR-02"
+PSU <- "SDMB-10"
 ```
 
 # Step 2. Set working directory for a single ARU location within the PSU
@@ -111,10 +111,10 @@ hist(data$JDay)
 You will need to specify the location of the ARU. Simplest option is to import a location table for all sites and merge with the data table.
 
 ```{r}
-loc <- read.csv("C:/Users/McmanusJ/OneDrive - EC-EC/Boreal Bird Monitoring Program (Prairies)/BOSS Sites/! This folder holds a csv with all sites/AllSites_PrairieRegionBoreal.csv")
+loc <- read.csv("D:/GBMP/ARU Recordings/2025/cws_all_bsc_open_location_table_lookup.csv")
 
-data <- mergelocations(data = data, locationdata = loc, locationname = "Site", 
-                        Latitude = "Latitude", Longitude = "Longitude")
+data <- mergelocations(data = data, locationdata = loc, locationname = "location", 
+                        Latitude = "latitude", Longitude = "longitude")
 
 ```
 
@@ -125,7 +125,7 @@ getSunCalcs pulls the timezone from the datetime column. This is not always corr
 tmz <- attr(data$datetime,"tzone")
 tmz
 
-data$datetime <- force_tz(data$datetime, tzone = "Canada/Central")
+data$datetime <- force_tz(data$datetime, tzone = "America/Denver")
 
 data <- getSunCalcs(data, calc = c("sunrise","sunset"), doParallel=T)
 
@@ -149,16 +149,16 @@ There is a little wiggle room in the minutes below to account for small variatio
 
 ```{r}
 data <- data  %>% mutate(category= NA) %>% 
-  mutate(start.date=min(JDay),end.date= median(JDay),start.time=as_hms(sunrise-(35*60)),end.time=as_hms(sunrise +(2.1*60*60))) %>% 
+  mutate(start.date=min(JDay),end.date= median(JDay),start.time=as_hms(sunrise-(35*60)),end.time=as_hms(sunrise +(1.6*60*60))) %>% 
   categorize("EE",start.date,end.date,start.time,end.time) %>% 
   
-  mutate(start.date=min(JDay),end.date= median(JDay),start.time= as_hms(sunrise+(2.2*60*60)),end.time= as_hms(sunrise+(4.1*60*60)))%>% 
+  mutate(start.date=min(JDay),end.date= median(JDay),start.time= as_hms(sunrise+(1.7*60*60)),end.time= as_hms(sunrise+(4.1*60*60)))%>% 
   categorize("EL",start.date,end.date,start.time,end.time) %>%
   
-  mutate(start.date=median(JDay) +1, end.date= max(JDay),start.time=as_hms(sunrise -(35*60)),end.time=as_hms(sunrise +(2.1*60*60))) %>% 
+  mutate(start.date=median(JDay) +1, end.date= max(JDay),start.time=as_hms(sunrise -(35*60)),end.time=as_hms(sunrise +(1.6*60*60))) %>% 
   categorize("LE",start.date,end.date,start.time,end.time) %>% 
 
-  mutate(start.date= median(JDay) + 1, end.date= max(JDay),start.time= as_hms(sunrise+(2.2*60*60)),end.time= as_hms(sunrise+(4.1*60*60)))%>% 
+  mutate(start.date= median(JDay) + 1, end.date= max(JDay),start.time= as_hms(sunrise+(1.7*60*60)),end.time= as_hms(sunrise+(4.1*60*60)))%>% 
   categorize("LL",start.date,end.date,start.time,end.time) %>%
   
   mutate(start.date=min(JDay),end.date= max(JDay),start.time=as_hms(sunset - (40*60)),end.time=as_hms(sunset+(65*60))) %>% 
@@ -168,10 +168,11 @@ data <- data  %>% mutate(category= NA) %>%
 
 ```
 
-Remove NAs
+Check for a reasonable balance in the categories
 ```{r}
-dataselection <- data[!is.na(data$category),]
+#dataselection <- data[!is.na(data$category),]
 table(data$category)
+
 ```
 
 
@@ -206,8 +207,6 @@ This can take a while if you have a lot of recordings.
 
 knitr::opts_knit$set(root.dir = paste(parentdir, PSU, sep = "/"))
 
-#setwd(paste(parentdir, PSU, sep = "/")) 
-
 ```
 
 
@@ -224,11 +223,16 @@ section.list <- section.list[!is.na(section.list$location),]
 
 # Step 9. Run the selection
 
-We recommend having a file window open to the target folder, and after each category selection inspect that the recordings have copied properly. There may be situations where one station in the PSU stopped recording early, where clock/lat longs were programmed differently between units in a PSU, or two stations accidentally were entered with the same name in the field. It's best to trouble shoot these issues as you go, and for instances where it's just a single station that requires a different recording, you should manually copy over the nearest matching time to the draw that is good quality.
+We recommend having a file window open to the target folder, and after each category selection inspect that the recordings have copied properly. There may be situations where one ARU station in the PSU stopped recording early, where clock/lat longs were programmed differently between units in a PSU, or two stations accidentally were entered with the same name in the field. It's best to trouble shoot these issues as you go, and for instances where it's just a single station that requires a different recording, you should manually copy over the nearest matching time to the draw that is good quality.
+
+When you run each selection chunk, audacity will automatically open the recording from the random sample of 6 (in order). Look at the spectrogram and decide whether it is good enough for transcription. Then see the prompt in the Rstudio console. If you get to the end of the 6 samples and you have not found a good recording you have two options:
+
+1. Create a new random sample in the code chunk on line 194
+2. If the ARU was only set out for a short amount of time, use "x" to escape the selection function and rerun the same selection chunk and choose the best of the worst.
 
 EE selection
 ```{r}
-file_used_EE <- select_recordings(MorningDraw, "Morning", initial_file_index = 1, target_folder = new.folder.10M1SPT)
+file_used_EE <- select_recordings(MorningDraw, "Morning", initial_file_index = 1, target_folder = new.folder.5M1SPT)
 ```
 
 EL selection
@@ -238,12 +242,12 @@ file_used_EL <- select_recordings(MorningDraw, "Morning", initial_file_index = 7
 
 LE selection
 ```{r}
-file_used_LE <- select_recordings(MorningDraw, "Morning", initial_file_index = 19, target_folder = new.folder.3M1SPT)
+file_used_LE <- select_recordings(MorningDraw, "Morning", initial_file_index = 13, target_folder = new.folder.3M1SPT)
 ```
 
 LL selection
 ```{r}
-file_used_LL <- select_recordings(MorningDraw, "Morning", initial_file_index = 25, target_folder = new.folder.3M1SPT)
+file_used_LL <- select_recordings(MorningDraw, "Morning", initial_file_index = 19, target_folder = new.folder.3M1SPT)
 ```
 
 Dusk1 selection
