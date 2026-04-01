@@ -46,28 +46,30 @@ Note: do not download the normal executable file from the main page. Instead go 
 https://sourceforge.net/projects/sox/
 
 ```{r}
-setsox.exe("C:/sox-14.4.2/sox.exe")
+setsox.exe("C:/Users/AlexE/Downloads/sox-14.4.2/sox.exe")
 ```
 
 
 Enter the parent directory that contains all the recordings for all PSUs in the given year for which you want to run the selection.
 
 ```{r}
-parentdir <- "D:/BBMP/2024"
+parentdir <- "D:/BBMP RMNP 2025"
 ```
 
 Finally, create new folders where the selected recordings will be copied into for upload to WildTrax. 10min and 3min recordings have to be uploaded separately, so they need to be copied into different folders.
 
 ```{r}
-dir.create("D:/BBMP/2024/WildTrax Upload") #only needs to be run once to create the folder
+dir.create("D:/WildTrax Upload") #only needs to be run once to create the folder
 
-new.folder.10M1SPT <- "D:/BBMP/2024/WildTrax Upload/10M1SPT"
-new.folder.3M1SPT <- "D:/BBMP/2024/WildTrax Upload/3M1SPT"
-new.folder.dusk <- "D:/BBMP/2024/WildTrax Upload/DUSK"
+new.folder.10M1SPT <- "D:/WildTrax Upload/10M1SPT"
+new.folder.3M1SPT <- "D:/WildTrax Upload/3M1SPT"
+new.folder.dusk <- "D:/WildTrax Upload/DUSK"
+new.folder.nocturnal <- "D:/WildTrax Upload/NOCTURNAL"
 
 dir.create(new.folder.10M1SPT) #only needs to be run once to create the folder
 dir.create(new.folder.3M1SPT) #only needs to be run once to create the folder
 dir.create(new.folder.dusk) #only needs to be run once to create the folder
+dir.create(new.folder.nocturnal)
 ```
 
 You will only need to run the code chunks above once each session. You will now cycle through the code below for each Primary Sampling Unit or grid of ARUs deployed across the same time period in relatively close proximity.
@@ -77,7 +79,7 @@ You will only need to run the code chunks above once each session. You will now 
 #Step 1. Set your Primary Sampling Unit (PSU)
 
 ```{r}
-PSU <- "511--355"
+PSU <- "476--323"
 ```
 
 # Step 2. Set working directory for a single ARU location within the PSU
@@ -86,7 +88,7 @@ Note that if the first station folder is not very good for some reason (e.g., AR
 
 ```{r, setup}
 
-knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, PSU, sep = "/"), recursive = F)[1])
+knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, PSU, sep = "/"), recursive = F)[6])
 
 ```
 
@@ -95,7 +97,7 @@ knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, PSU, sep = "/"), recu
 The following function creates a dataframe with file directory, location, data/time, and julian date.Specify the start and end dates of the selection you would like to do. In the example below we are limiting to dates within the primary breeding period for most songbirds in Canada BCR 11 (May 28 - July 7). You can alter the dates and add draws for other spp groups later.
 
 ```{r}
-data <- get.wavs(start.date = "2024-05-28",end.date = "2024-07-07") 
+data <- get.wavs(start.date = "2025-05-28",end.date = "2025-07-07") 
 ```
 
 Inspect data for anything out of the ordinary - need a good distribution of data for selection. If not (e.g. ARU failure), go back and select different folder to use as the model for selection.
@@ -111,7 +113,7 @@ hist(data$JDay)
 You will need to specify the location of the ARU. Simplest option is to import a location table for all sites and merge with the data table.
 
 ```{r}
-loc <- read.csv("C:/Users/McmanusJ/OneDrive - EC-EC/Boreal Bird Monitoring Program (Prairies)/BOSS Sites/! This folder holds a csv with all sites/AllSites_PrairieRegionBoreal.csv")
+loc <- read.csv("D:/rmnp_locs.csv")
 
 data <- mergelocations(data = data, locationdata = loc, locationname = "Site", 
                         Latitude = "Latitude", Longitude = "Longitude")
@@ -125,7 +127,7 @@ getSunCalcs pulls the timezone from the datetime column. This is not always corr
 tmz <- attr(data$datetime,"tzone")
 tmz
 
-data$datetime <- force_tz(data$datetime, tzone = "Canada/Central")
+data$datetime <- force_tz(data$datetime, tzone = "America/Winnipeg")
 
 data <- getSunCalcs(data, calc = c("sunrise","sunset"), doParallel=T)
 
@@ -170,7 +172,10 @@ data <- data  %>% mutate(category= NA) %>%
   categorize("LL",start.date,end.date,start.time,end.time) %>%
   
   mutate(start.date=min(JDay),end.date= max(JDay),start.time=as_hms(sunset - (40*60)),end.time=as_hms(sunset+(40*60))) %>% 
-  categorize("DUSK",start.date,end.date,start.time,end.time) %>% 
+  categorize("DUSK",start.date,end.date,start.time,end.time) %>%
+  
+  mutate(start.date=min(JDay), end.date=max(JDay), start.time=as_hms(sunset+(40*60)), end.time=as_hms(sunrise-(65*60))) %>%
+  categorize("NOCTURNAL",start.date,end.date,start.time,end.time) %>%
   
   select(-start.date, -end.date, -start.time, -end.time)
 
@@ -187,7 +192,8 @@ table(data$category)
 
 ```{r}
 dusk <- subset(data, category=="DUSK")
-morn <- subset(data, category!="DUSK")
+morn <- subset(data, category!="DUSK" & category!="NOCTURNAL")
+noct <- subset(data, category=="NOCTURNAL")
 ```
 
 
@@ -204,6 +210,8 @@ MorningDraw <- morn %>% filter(case_when(category == "EE" ~ file.duration > 599,
 
 DuskDraw <- dusk  %>% sample_n(12)
 
+NocturnalDraw <- noct %>% sample_n(12)
+
 ```
 
 # Step 8. Load all recordings for the PSU
@@ -216,13 +224,11 @@ knitr::opts_knit$set(root.dir = paste(parentdir, PSU, sep = "/"))
 
 #setwd(paste(parentdir, PSU, sep = "/")) 
 
-
-
 ```
 
 
 ```{r}
-section.list <- get.wavs(start.date = "2024-05-28",end.date = "2024-07-07")
+section.list <- get.wavs(start.date = "2025-05-28",end.date = "2025-07-07")
 ```
 
 
@@ -279,6 +285,31 @@ dusk2 <- select_recordings(DuskDraw, "Dusk", initial_file_index = dusk1 + 1, tar
 Dusk3 selection
 ```{r}
 dusk3 <- select_recordings(DuskDraw, "Dusk", initial_file_index = dusk2 + 1, target_folder = new.folder.dusk)
+```
+
+Nocturnal1 selection
+```{r}
+noct1 <- select_recordings(NocturnalDraw, "Nocturnal", initial_file_index = 1, target_folder = new.folder.nocturnal)
+```
+
+Nocturnal2 selection
+```{r}
+noct2 <- select_recordings(NocturnalDraw,"Nocturnal", initial_file_index = noct1+1, target_folder = new.folder.nocturnal)
+```
+
+Nocturnal3 selection
+```{r}
+noct3 <- select_recordings(NocturnalDraw,"Nocturnal", initial_file_index = noct2+1, target_folder = new.folder.nocturnal)
+```
+
+Nocturnal4 selection
+```{r}
+noct4 <- select_recordings(NocturnalDraw, "Nocturnal", initial_file_index = noct3+1, target_folder = new.folder.nocturnal)
+```
+
+Nocturnal5 selection
+```{r}
+noct5 <- select_recordings(NocturnalDraw, "Nocturnal", initial_file_index = noct4+1, target_folder = new.folder.nocturnal)
 ```
 
 
