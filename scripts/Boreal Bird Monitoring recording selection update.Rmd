@@ -88,7 +88,7 @@ Note that if the first station folder is not very good for some reason (e.g., AR
 
 ```{r, setup}
 
-knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, PSU, sep = "/"), recursive = F)[6])
+knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, PSU, sep = "/"), recursive = F)[1])
 
 ```
 

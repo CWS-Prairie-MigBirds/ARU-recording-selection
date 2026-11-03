@@ -53,17 +53,17 @@ setsox.exe("C:/sox-14.4.2/sox.exe")
 Enter the parent directory that contains all the recordings for all PSUs in the given year for which you want to run the selection.
 
 ```{r}
-parentdir <- "D:/GBMP/ARU Recordings/2025/SDMB"
+parentdir <- "G:/ARUs/2026/PPCA"
 ```
 
 Finally, create new folders where the selected recordings will be copied into for upload to WildTrax. 10min and 3min recordings have to be uploaded separately, so they need to be copied into different folders.
 
 ```{r}
-dir.create("D:/GBMP/ARU Recordings/2025/WildTrax Upload") #only needs to be run once to create the folder
+dir.create("G:/ARUs/2026/PPCA/WildTrax Upload") #only needs to be run once to create the folder
 
-new.folder.5M1SPT <- "D:/GBMP/ARU Recordings/2025/WildTrax Upload/5M1SPT"
-new.folder.3M1SPT <- "D:/GBMP/ARU Recordings/2025/WildTrax Upload/3M1SPT"
-new.folder.dusk <- "D:/GBMP/ARU Recordings/2025/WildTrax Upload/DUSK"
+new.folder.5M1SPT <- "G:/ARUs/2026/PPCA/WildTrax Upload/5M1SPT"
+new.folder.3M1SPT <- "G:/ARUs/2026/PPCA/WildTrax Upload/3M1SPT"
+new.folder.dusk <- "G:/ARUs/2026/PPCA/WildTrax Upload/DUSK"
 
 dir.create(new.folder.5M1SPT) #only needs to be run once to create the folder
 dir.create(new.folder.3M1SPT) #only needs to be run once to create the folder
@@ -77,7 +77,7 @@ You will only need to run the code chunks above once each session. You will now 
 #Step 1. Set your Primary Sampling Unit (PSU)
 
 ```{r}
-PSU <- "SDMB-10"
+PSU <- "SGOV-01"
 ```
 
 # Step 2. Set working directory for a single ARU location within the PSU
@@ -95,7 +95,7 @@ knitr::opts_knit$set(root.dir = list.dirs(paste(parentdir, PSU, sep = "/"), recu
 The following function creates a dataframe with file directory, location, data/time, and julian date. Specify the start and end dates of the selection you would like to do. In the example below we are limiting to dates within the primary breeding period for most songbirds in Canada BCR 11 (May 28 - July 7). You can alter the dates and add draws for other spp groups later.
 
 ```{r}
-data <- get.wavs(start.date = "2025-05-28",end.date = "2025-07-07") 
+data <- get.wavs(start.date = "2026-05-28",end.date = "2026-07-07") 
 ```
 
 Inspect data for anything out of the ordinary - need a good distribution of data for selection. If not (e.g. ARU failure), go back and select different folder to use as the model for selection on code line 89.
